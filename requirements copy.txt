@@ -1,0 +1,13 @@
+langchain
+wikipedia
+langchain_community
+langchain_openai
+langchain-anthropic
+langchain-ollama
+python-dotenv
+pydantic
+google-genai
+redlines
+ipython
+google-generativeai
+streamlit
