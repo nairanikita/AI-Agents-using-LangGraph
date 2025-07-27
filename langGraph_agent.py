@@ -10,6 +10,9 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_tavily import TavilySearch
 import getpass
 import os
+import asyncio
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
 # genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 if not os.environ.get("TAVILY_API_KEY"):
     os.environ["TAVILY_API_KEY"] = getpass.getpass("Tavily API key:\n")
@@ -20,15 +23,13 @@ print(tool.name)
 import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 
+# For persistence in the agent, we can use SqliteSaver
 # conn = sqlite3.connect(":memory:")
-conn = sqlite3.connect(":memory:", check_same_thread=False)
+# conn = sqlite3.connect(":memory:", check_same_thread=False)
+# memory = SqliteSaver(conn)
+# print(type(memory))
+# print(type(memory.conn))
 
-memory = SqliteSaver(conn)
-
-print(type(memory))
-print(type(memory.conn))
-# import inspect
-# print(inspect.getsource(SqliteSaver.__init__))
 
 class AgentState(TypedDict):
     messages:Annotated[list[AnyMessage],operator.add]
@@ -73,55 +74,65 @@ class Agent:
             results.append(ToolMessage(tool_call_id=t['id'], name=t['name'], content=str(result)))
         print("Back to the model!")
         return {'messages': results}
-prompt = """You are a smart research assistant.You can use tools like search to get real-time or factual answers. \
+prompt = """You are a smart research assistant.You can use tools like Tavily search to get real-time or factual answers. \
 You are allowed to make multiple calls (either together or in sequence). \
 Only look up information when you are sure of what you want. \
 If you need to look up some information before asking a follow up question, you are allowed to do that!
 """
+async def main():
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as memory:
+        model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+        abot = Agent(model, [tool], system=prompt, checkpointer=memory)
 
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")  
-abot = Agent(model, [tool], checkpointer=memory,system=prompt)
+        messages = [HumanMessage(content="What is the weather in SF?")]
+        thread = {"configurable": {"thread_id": "1"}}
 
-messages = [HumanMessage(content="What is the weather in sf?")]
-thread={"configurable":{"thread_id":"1"}}
-# result = abot.graph.stream({"messages": messages})
-# print(result["messages"][-1].content)
-for event in abot.graph.stream({"messages": messages}, thread):
-    for v in event.values():
-        print(v['messages'])
+        async for event in abot.graph.astream_events({"messages": messages}, thread, version="v1"):
+            kind = event["event"]
+            if kind == "on_chat_model_stream":
+                content = event["data"]["chunk"].content
+                if content:
+                    print(content, end="|")
 
-messages = [HumanMessage(content="What is the weather in la?")]
-thread={"configurable":{"thread_id":"1"}}
-# result = abot.graph.stream({"messages": messages})
-# print(result["messages"][-1].content)
-for event in abot.graph.stream({"messages": messages}, thread):
-    for v in event.values():
-        print(v['messages'])
+if __name__ == "__main__":
+    asyncio.run(main())
 
-messages = [HumanMessage(content="Which one is hotter")]
-thread={"configurable":{"thread_id":"1"}}
-# result = abot.graph.stream({"messages": messages})
-# print(result["messages"][-1].content)
-for event in abot.graph.stream({"messages": messages}, thread):
-    for v in event.values():
-        print(v['messages'])
-
-messages = [HumanMessage(content="Which one is hotter")]
-thread={"configurable":{"thread_id":"2"}}
-# result = abot.graph.stream({"messages": messages})
-# print(result["messages"][-1].content)
-for event in abot.graph.stream({"messages": messages}, thread):
-    for v in event.values():
-        print(v['messages'])
-
-# query = "Who won the super bowl in 2024? In what state is the winning team headquarters located? \
-# What is the GDP of that state? Answer each question." 
-# messages = [HumanMessage(content=query)]
-# abot = Agent(model, [tool], system=prompt)
-# result = abot.graph.invoke({"messages": messages})
-# print(result["messages"][-1].content)
-
-    
+# For testing the persistence of the agent
 
 
-        
+# model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")  
+# abot = Agent(model, [tool], checkpointer=memory,system=prompt)
+
+# messages = [HumanMessage(content="What is the weather in sf?")]
+# thread={"configurable":{"thread_id":"1"}}
+# # result = abot.graph.stream({"messages": messages})
+# # print(result["messages"][-1].content)
+# for event in abot.graph.stream({"messages": messages}, thread):
+#     for v in event.values():
+#         print(v['messages'])
+
+# messages = [HumanMessage(content="What is the weather in la?")]
+# thread={"configurable":{"thread_id":"1"}}
+# # result = abot.graph.stream({"messages": messages})
+# # print(result["messages"][-1].content)
+# for event in abot.graph.stream({"messages": messages}, thread):
+#     for v in event.values():
+#         print(v['messages'])
+
+# messages = [HumanMessage(content="Which one is hotter")]
+# thread={"configurable":{"thread_id":"1"}}
+# # result = abot.graph.stream({"messages": messages})
+# # print(result["messages"][-1].content)
+# for event in abot.graph.stream({"messages": messages}, thread):
+#     for v in event.values():
+#         print(v['messages'])
+
+# messages = [HumanMessage(content="Which one is hotter")]
+# thread={"configurable":{"thread_id":"2"}}
+# # result = abot.graph.stream({"messages": messages})
+# # print(result["messages"][-1].content)
+# for event in abot.graph.stream({"messages": messages}, thread):
+#     for v in event.values():
+#         print(v['messages'])
+
+
