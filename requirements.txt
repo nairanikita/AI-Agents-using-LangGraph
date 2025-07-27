@@ -14,3 +14,4 @@ ipython
 google-generativeai
 streamlit
 langchain-google-genai
+langgraph.checkpoint.sqlite
