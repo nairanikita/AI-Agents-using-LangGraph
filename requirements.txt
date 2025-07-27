@@ -1,4 +1,6 @@
 langchain
+langgraph
+
 wikipedia
 langchain_community
 langchain_openai
@@ -11,3 +13,4 @@ redlines
 ipython
 google-generativeai
 streamlit
+langchain-google-genai
